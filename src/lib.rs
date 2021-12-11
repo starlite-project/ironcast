@@ -1,8 +1,8 @@
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
-}
+mod util;
+
+pub use self::util::*;
+
+#[cfg(windows)]
+compile_error!("this crate is not designed for windows yet.");
+
+pub struct IronCast {}
