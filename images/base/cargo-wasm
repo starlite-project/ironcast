@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+set -eu
+
+shift # Ignore "wasm"
+args=()
+while (( "$#" )); do
+    if [[ "$1" == "--" ]] ; then
+        : # Ignore
+    elif [[ "$1" == "-o" ]] ; then
+        shift
+        output="$1"
+    else
+        args+="$1"
+    fi
+
+    shift
+done
+
+cargo "build" "--target=wasm32-unknown-unknown" ${args[@]+"${args[@]}"}
+
+for wasm in $(find target/ -name '*wasm' -not -path '*/deps/*'); do
+    wasm-gc "${wasm}" "${wasm}.gc"
+
+    wasm2wat \
+        --fold-exprs \
+        --generate-names \
+        --inline-exports \
+        --ignore-custom-section-errors \
+        -o "${output}.wat" \
+        "${wasm}.gc" \
+        2> >(grep -v 'invalid linking metadata version: 3' 1>&2)
+done
