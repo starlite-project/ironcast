@@ -106,6 +106,22 @@ fn build_channel(channel: &str, build_extra: bool) -> io::Result<()> {
 fn build_tool(tool: &str) -> io::Result<()> {
 	let full_name = format!("{repository}/{tool}", repository = REPOSITORY, tool = tool);
 
+	let _ = Command::new("docker")
+		.args(["pull", &full_name, "||", "true"])
+		.status();
+
+	let build_status = Command::new("docker")
+		.args(["build", "-t", &full_name])
+		.arg(
+			PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+				.join("images")
+				.join(tool),
+		)
+		.spawn()?
+		.wait()?;
+
+	handle_exit_status(build_status)?;
+
 	Ok(())
 }
 

@@ -11,3 +11,6 @@ incremental = false
 [profile.release]
 codegen-units = 1
 incremental = false
+
+[lib]
+path = "src/lib.rs"

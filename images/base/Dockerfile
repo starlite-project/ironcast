@@ -31,10 +31,12 @@ ADD --chown=playground entrypoint.sh /playground/tools/
 
 FROM toolchain as bare-sources
 
-RUN cargo init /playground
+# RUN cargo init /playground
 
-ADD --chown=playground Cargo.toml /playground/Cargo.toml
-RUN cargo fetch
+# ADD --chown=playground Cargo.toml /playground/Cargo.toml
+# RUN cargo fetch
+
+RUN cargo new playground
 
 FROM bare-sources as munge
 
