@@ -31,12 +31,10 @@ ADD --chown=playground entrypoint.sh /playground/tools/
 
 FROM toolchain as bare-sources
 
-# RUN cargo init /playground
+RUN cargo init /playground
 
-# ADD --chown=playground Cargo.toml /playground/Cargo.toml
-# RUN cargo fetch
-
-RUN cargo new playground
+ADD --chown=playground ./Cargo.toml /playground/Cargo.toml
+RUN cargo fetch
 
 FROM bare-sources as munge
 
@@ -55,7 +53,7 @@ RUN cargo build
 RUN cargo build --release
 RUN rm src/*.rs
 
-ADD --chown=playground postinstall.sh /playground/tools
+ADD --chown=playground postinstall.sh /playground/tools/
 RUN /playground/tools/postinstall.sh ${channel}
 ADD --chown=playground cargo-wasm /playground/.cargo/bin/
 

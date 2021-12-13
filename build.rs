@@ -8,25 +8,20 @@ const CHANNELS_TO_BUILD: [&str; 3] = ["stable", "beta", "nightly"];
 const TOOLS_TO_BUILD: [&str; 3] = ["rustfmt", "clippy", "miri"];
 const REPOSITORY: &str = "starlightpyro";
 
-fn main() -> io::Result<()> {
+fn main() {
 	println!("cargo:rerun-if-changed=build.rs");
 	println!("cargo:rerun-if-changed=images");
 
 	for channel in CHANNELS_TO_BUILD {
-		build_channel(
-			channel,
-			env::var("PROFILE").map_or(false, |val| val == "release"),
-		)?;
+		build_channel(channel).unwrap();
 	}
 
 	for tool in TOOLS_TO_BUILD {
-		build_tool(tool)?;
+		build_tool(tool).unwrap();
 	}
-
-	Ok(())
 }
 
-fn build_channel(channel: &str, build_extra: bool) -> io::Result<()> {
+fn build_channel(channel: &str) -> io::Result<()> {
 	let image_name = format!("rust-{channel}", channel = channel);
 	let full_name = format!(
 		"{repository}/{image_name}",
@@ -34,46 +29,53 @@ fn build_channel(channel: &str, build_extra: bool) -> io::Result<()> {
 		image_name = image_name
 	);
 
-	let _ = Command::new("docker")
-		.args(["pull", &full_name, "||", "true"])
-		.status();
+	let pull_statuses = vec![
+		full_name.as_str(),
+		format!("{full_name}:munge", full_name = full_name).as_str(),
+		format!("{full_name}:sources", full_name = full_name).as_str(),
+	]
+	.into_iter()
+	.map(pull_image)
+	.collect::<Result<Vec<bool>, _>>()?;
 
-	if build_extra {
-		for target in ["munge", "sources"] {
-			let exit_status = Command::new("docker")
-				.args([
-					"build",
-					"-t",
-					&format!(
-						"{full_name}:{target}",
-						full_name = full_name,
-						target = target
-					),
-				])
-				.args(["--cache-from", &full_name])
-				.args([
-					"--cache-from",
-					&format!(
-						"{full_name}:{target}",
-						full_name = full_name,
-						target = target
-					),
-				])
-				.args(["--target", target])
-				.args([
-					"--build-arg",
-					&format!("channel={channel}", channel = channel),
-				])
-				.arg(
-					PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-						.join("images")
-						.join("base"),
-				)
-				.spawn()?
-				.wait()?;
+	if pull_statuses.iter().all(|stat| *stat) {
+		return tag_image(&full_name, &image_name);
+	}
 
-			handle_exit_status(exit_status)?;
-		}
+	for target in ["munge", "sources"] {
+		let exit_status = Command::new("docker")
+			.args([
+				"build",
+				"-t",
+				&format!(
+					"{full_name}:{target}",
+					full_name = full_name,
+					target = target
+				),
+			])
+			.args(["--cache-from", &full_name])
+			.args([
+				"--cache-from",
+				&format!(
+					"{full_name}:{target}",
+					full_name = full_name,
+					target = target
+				),
+			])
+			.args(["--target", target])
+			.args([
+				"--build-arg",
+				&format!("channel={channel}", channel = channel),
+			])
+			.arg(
+				PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+					.join("images")
+					.join("base"),
+			)
+			.spawn()?
+			.wait()?;
+
+		handle_exit_status(exit_status)?;
 	}
 
 	let last_build = Command::new("docker")
@@ -93,12 +95,7 @@ fn build_channel(channel: &str, build_extra: bool) -> io::Result<()> {
 
 	handle_exit_status(last_build)?;
 
-	let tag = Command::new("docker")
-		.args(["tag", &full_name, &image_name])
-		.spawn()?
-		.wait()?;
-
-	handle_exit_status(tag)?;
+	tag_image(&full_name, &image_name)?;
 
 	Ok(())
 }
@@ -106,9 +103,11 @@ fn build_channel(channel: &str, build_extra: bool) -> io::Result<()> {
 fn build_tool(tool: &str) -> io::Result<()> {
 	let full_name = format!("{repository}/{tool}", repository = REPOSITORY, tool = tool);
 
-	let _ = Command::new("docker")
-		.args(["pull", &full_name, "||", "true"])
-		.status();
+	let pulled_image = pull_image(&full_name)?;
+
+	if pulled_image {
+		return tag_image(&full_name, tool)
+	}
 
 	let build_status = Command::new("docker")
 		.args(["build", "-t", &full_name])
@@ -133,4 +132,21 @@ fn handle_exit_status(status: ExitStatus) -> io::Result<()> {
 	}
 
 	Ok(())
+}
+
+fn tag_image(full_name: &str, tag: &str) -> io::Result<()> {
+	let tag_status = Command::new("docker")
+		.args(["tag", full_name, tag])
+		.spawn()?
+		.wait()?;
+
+	handle_exit_status(tag_status)
+}
+
+fn pull_image(full_name: &str) -> io::Result<bool> {
+	Ok(Command::new("docker")
+		.args(["pull", full_name])
+		.spawn()?
+		.wait()?
+		.success())
 }

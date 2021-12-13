@@ -1,4 +1,4 @@
-ARG base_image=starlightpyro/rust-nightly:latest
+ARG base_image=starlightpyro/rust-nightly:sources
 FROM ${base_image}
 
 RUN rustup component add clippy-preview
