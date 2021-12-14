@@ -1,4 +1,14 @@
-use std::{error::Error, fmt::{Display, Formatter, Result as FmtResult}, io, path::PathBuf, string::FromUtf8Error, time::Duration};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+use std::{
+	error::Error,
+	fmt::{Display, Formatter, Result as FmtResult},
+	fs::{self, Permissions},
+	io,
+	path::PathBuf,
+	string::FromUtf8Error,
+	time::Duration,
+};
 
 use serde::{Deserialize, Serialize};
 use tempdir::TempDir;
@@ -138,10 +148,35 @@ pub struct Version {
 
 pub struct Sandbox {
 	scratch: TempDir,
-	input_path: PathBuf,
-	output_path: PathBuf,
+	input_file: PathBuf,
+	output_dir: PathBuf,
+}
+
+impl Sandbox {
+	pub fn new() -> Result<Self, SandboxError> {
+		let scratch = TempDir::new("ironcast").map_err(SandboxError::UnableToCreateTempDir)?;
+		let input_file = scratch.path().join("input.rs");
+		let output_dir = scratch.path().join("output");
+
+		fs::create_dir(&output_dir).map_err(SandboxError::UnableToCreateOutputDir)?;
+
+		#[cfg(unix)]
+		fs::set_permissions(&output_dir, wide_open_permissions())
+			.map_err(SandboxError::UnableToSetOutputPermissions)?;
+
+		Ok(Self {
+			scratch,
+			input_file,
+			output_dir,
+		})
+	}
 }
 
 fn vec_to_str(v: Vec<u8>) -> Result<String, SandboxError> {
 	Ok(String::from_utf8(v)?)
+}
+
+#[cfg(unix)]
+fn wide_open_permissions() -> Permissions {
+	PermissionsExt::from_mode(0o777)
 }
